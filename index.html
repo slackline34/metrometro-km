@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Corrida">
+<title>Corrida</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#EEF2F5; --panel:#FFFFFF; --ink:#14202B; --muted:#5B6B7A; --line:#D3DBE2;
+  --blue:#1F4FD8; --blue-soft:#DCE5FB; --amber:#FFB020; --amber-soft:#FFE7B3; --red:#D6324A; --ok:#1E9E5A;
+  --num:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --txt:"Barlow",-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --tabh:64px;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1621; --panel:#172231; --ink:#E8EEF4; --muted:#93A3B4; --line:#2A3A4D;
+    --blue:#6E93FF; --blue-soft:#22325A; --amber-soft:#4A3A16; --red:#FF6B7F; --ok:#4CD38A;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1621; --panel:#172231; --ink:#E8EEF4; --muted:#93A3B4; --line:#2A3A4D;
+  --blue:#6E93FF; --blue-soft:#22325A; --amber-soft:#4A3A16; --red:#FF6B7F; --ok:#4CD38A;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--txt);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+main{max-width:520px;margin:0 auto;padding:12px 16px calc(var(--tabh) + 28px)}
+h1{font-family:var(--num);font-weight:700;font-size:2rem;margin:6px 0 12px;line-height:1.1}
+h2{font-family:var(--num);font-weight:600;font-size:1.35rem;margin:0 0 10px}
+h3{font-family:var(--num);font-weight:600;font-size:1.25rem;margin:22px 0 8px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.hint{color:var(--muted);font-size:.9rem;margin:10px 0 0}
+.card{margin-top:16px;background:var(--panel);border-radius:18px;padding:16px;border:1px solid var(--line)}
+
+/* ---------- Correr ---------- */
+.live{background:var(--panel);border-radius:22px;padding:18px 18px 16px;border:1px solid var(--line)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--muted);font-size:.95rem}
+.gps{display:flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.dot.good{background:var(--ok)} .dot.weak{background:var(--amber)} .dot.bad{background:var(--red)}
+.cad{display:flex;align-items:flex-end;flex-wrap:wrap;gap:0 10px;margin:6px 0 2px}
+.cad .n{font-family:var(--num);font-weight:700;font-size:clamp(6rem,30vw,9rem);line-height:.85;font-variant-numeric:tabular-nums}
+.cad .u{font-family:var(--num);font-size:1.4rem;color:var(--muted);padding-bottom:10px;white-space:nowrap}
+.beat{height:8px;border-radius:4px;background:var(--blue-soft);overflow:hidden;margin:8px 0 14px}
+.beat i{display:block;height:100%;width:100%;background:var(--blue);opacity:0;transition:opacity .12s ease-out}
+.beat i.on{opacity:1;transition:none}
+.next{font-size:1rem;margin-bottom:12px}
+.next b{font-weight:600}
+.track{display:flex;gap:3px;height:34px;margin-bottom:14px}
+.track .s{flex-grow:1;border-radius:6px;background:var(--blue-soft);display:flex;align-items:center;justify-content:center;font-family:var(--num);font-weight:600;font-size:.95rem;color:var(--muted);position:relative;overflow:hidden}
+.track .s .fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--blue);opacity:.28}
+.track .s.cur{color:var(--ink);outline:2px solid var(--blue)}
+.track .s.done{color:var(--ink)}
+.track .s span{position:relative}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stat .v{font-family:var(--num);font-weight:600;font-size:1.9rem;line-height:1;font-variant-numeric:tabular-nums}
+.stat .l{color:var(--muted);font-size:.85rem}
+.adj{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.adj button{flex:1;padding:10px;border-radius:12px;border:1px solid var(--line);background:transparent;font-family:var(--num);font-weight:600;font-size:1.15rem}
+.adj .lab{flex:2;text-align:center;color:var(--muted);font-size:.9rem}
+.ctrl{display:flex;gap:10px}
+.ctrl+.ctrl{margin-top:10px}
+.ctrl button{flex:1;padding:16px 10px;border-radius:16px;border:0;font-family:var(--num);font-weight:700;font-size:1.35rem}
+.go{background:var(--blue);color:#fff}
+.pause{background:var(--amber);color:#14202B}
+.stop{background:transparent;border:2px solid var(--line)!important;color:var(--ink)}
+.ctrl .lockb{background:var(--ink);color:var(--bg);font-size:1.15rem}
+.ctrl button[hidden]{display:none}
+.msg{margin-top:10px;font-size:.92rem;color:var(--muted);min-height:1.2em}
+.msg.err{color:var(--red)}
+.splits{margin:0;padding:0;list-style:none}
+.splits li{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.splits li:first-child{border-top:0}
+.splits .empty{color:var(--muted)}
+
+/* Player de música */
+.player .mName{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seekrow{display:flex;align-items:center;gap:8px;margin:8px 0 6px;font-family:var(--num);font-size:1rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.seekrow span{min-width:3.2em}
+.seekrow span:last-child{text-align:right}
+.mSeek{flex:1;accent-color:var(--blue);height:30px}
+.pbtns{display:flex;gap:8px}
+.pbtns button{width:60px;height:48px;border-radius:12px;border:1px solid var(--line);background:transparent;font-size:1.15rem}
+.pbtns .pp{flex:1;width:auto;background:var(--blue);color:#fff;border:0;font-size:1.3rem}
+
+/* ---------- Atividade ---------- */
+.seg4{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--panel)}
+.seg4 button{border:0;background:transparent;border-radius:999px;padding:9px 0;color:var(--muted);font-weight:500}
+.seg4 button.on{background:var(--amber);color:#14202B;font-weight:600}
+.pnav{display:flex;align-items:center;justify-content:space-between;margin:14px 0 2px}
+.pnav button{width:44px;height:40px;border-radius:12px;border:1px solid var(--line);background:transparent;font-size:1.3rem}
+.pnav button:disabled{opacity:.35}
+.pnav span{font-size:1.05rem;font-weight:500}
+.bigkm{font-family:var(--num);font-weight:700;font-size:6rem;line-height:.9;margin:10px 0 0;font-variant-numeric:tabular-nums}
+.bigkm small{font-size:1.3rem;font-weight:500;color:var(--muted);margin-left:6px}
+.astats{margin:14px 0 6px}
+.chart svg{width:100%;height:auto;display:block}
+.rlist{display:flex;flex-direction:column;gap:10px}
+.rc{display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:center;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px;width:100%}
+.thumb{width:64px;height:64px;border-radius:12px;background:var(--blue-soft);color:var(--blue);overflow:hidden}
+.thumb svg{width:100%;height:100%;display:block}
+.rc .d{color:var(--muted);font-size:.85rem}
+.rc .nm{font-weight:600;margin-bottom:4px}
+.rc .row3{display:flex;gap:14px;font-family:var(--num);font-size:1.15rem;font-variant-numeric:tabular-nums}
+.rc .row3 small{font-family:var(--txt);font-size:.75rem;color:var(--muted);margin-left:2px}
+.empty-act{color:var(--muted);text-align:center;padding:26px 10px}
+
+/* ---------- Músicas e ajustes ---------- */
+.songs{list-style:none;margin:0 0 10px;padding:0}
+.songs li{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.songs li:first-child{border-top:0}
+.songs li.cur .nm{color:var(--blue);font-weight:600}
+.songs .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;background:none;border:0;padding:6px 0}
+.songs .x{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted)}
+.songs .empty{color:var(--muted)}
+.addf{display:inline-block;padding:10px 14px;border-radius:12px;border:1px solid var(--line);font-weight:500;cursor:pointer;position:relative}
+.addf input{position:absolute;width:1px;height:1px;opacity:0;left:0;top:0}
+.segrow{display:grid;grid-template-columns:2.2rem 1fr 1fr 2.4rem;gap:8px;align-items:center;margin-bottom:8px}
+.segrow .i{font-family:var(--num);font-weight:600;font-size:1.2rem;color:var(--muted);text-align:center}
+.segrow label{display:flex;flex-direction:column;font-size:.78rem;color:var(--muted)}
+.segrow input{margin-top:2px;width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-family:var(--num);font-size:1.25rem;font-weight:600}
+.segrow .del{height:42px;margin-top:16px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:1.2rem}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.btn2{padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:transparent;font-weight:500}
+.opt{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.opt:first-of-type{border-top:0}
+.opt small{color:var(--muted)}
+.opt select,.opt input[type=range]{max-width:55%}
+.opt select{padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+input[type=checkbox]{width:22px;height:22px;accent-color:var(--blue);flex:none}
+details summary{cursor:pointer;font-weight:600}
+details p{color:var(--muted);font-size:.92rem}
+.bkmsg{min-height:1.2em}
+.bkmsg.err{color:var(--red)}
+
+/* ---------- Abas ---------- */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs .in{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);height:var(--tabh)}
+.tabs button{border:0;background:transparent;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:.75rem;position:relative}
+.tabs svg{width:24px;height:24px}
+.tabs button.on{color:var(--blue);font-weight:600}
+.tabs button.live::after{content:"";position:absolute;top:10px;left:calc(50% + 10px);width:8px;height:8px;border-radius:50%;background:var(--red)}
+
+/* ---------- Folha de detalhes ---------- */
+.sheet{position:fixed;inset:0;z-index:40;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.sheet[hidden]{display:none}
+.sheet .in{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px calc(env(safe-area-inset-bottom,0px) + 30px)}
+.shtop{display:flex;align-items:center;justify-content:space-between;min-height:44px}
+.shtop button{border:0;background:transparent;color:var(--blue);font-size:1.05rem;padding:8px 0}
+.shtop span{color:var(--muted);font-size:.95rem}
+.shdate{color:var(--muted);margin:6px 0 0}
+.shname{font-family:var(--num);font-weight:600;font-size:1.6rem;margin:2px 0 0;background:none;border:0;padding:0;text-align:left;width:100%}
+.shname::after{content:" ✎";font-size:1rem;color:var(--muted)}
+.map{height:260px;border-radius:18px;overflow:hidden;background:var(--blue-soft);color:var(--blue);margin:8px 0 4px;position:relative;z-index:0}
+.map svg{width:100%;height:100%;display:block}
+.nomap{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted)}
+.spl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.spl th{text-align:left;font-weight:500;color:var(--muted);font-size:.85rem;padding:6px 4px;border-bottom:1px solid var(--line)}
+.spl td{padding:9px 4px;border-bottom:1px solid var(--line);font-family:var(--num);font-size:1.2rem}
+.spl tr.pt td{color:var(--muted)}
+.shact{display:flex;flex-direction:column;gap:10px;margin-top:22px}
+.shact button{padding:16px;border-radius:16px;border:0;font-family:var(--num);font-weight:700;font-size:1.3rem}
+.danger{background:transparent;border:2px solid var(--line)!important;color:var(--red)}
+
+/* ---------- Tela bloqueada ---------- */
+.lock{position:fixed;inset:0;z-index:50;background:#000;color:#5a5a5a;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top,0px) + 40px) 24px calc(env(safe-area-inset-bottom,0px) + 40px);touch-action:none;-webkit-user-select:none;user-select:none}
+.lock[hidden]{display:none}
+.lock .lc{font-family:var(--num);font-weight:700;font-size:7rem;line-height:1;text-align:center}
+.lock .lc small{display:block;font-size:1.2rem;font-weight:500}
+.lock .ld{font-family:var(--num);font-size:1.6rem;text-align:center}
+.lock .lm{font-size:.95rem;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:8px}
+.slide{width:100%;max-width:340px;text-align:center;font-size:.95rem}
+.slide input{-webkit-appearance:none;appearance:none;width:100%;height:64px;border-radius:32px;background:#1a1a1a;margin-top:10px;touch-action:pan-x}
+.slide input::-webkit-slider-thumb{-webkit-appearance:none;width:64px;height:64px;border-radius:50%;background:#444;border:0}
+
+.leaflet-container{font-family:var(--txt)}
+@media (prefers-reduced-motion: reduce){.beat i{transition:none}}
+</style>
+</head>
+<body>
+<main>
+
+<!-- ================= CORRER ================= -->
+<section class="view" id="vRun">
+  <h1>Correr</h1>
+  <div class="live" aria-live="polite">
+    <div class="top">
+      <span id="segLabel">Trecho 1 de 4</span>
+      <span class="gps"><span class="dot" id="gpsDot"></span><span id="gpsTxt">GPS parado</span></span>
+    </div>
+    <div class="cad"><span class="n" id="cadNow">165</span><span class="u">passos/min</span></div>
+    <div class="beat"><i id="beat"></i></div>
+    <div class="next" id="nextTxt"></div>
+    <div class="track" id="track"></div>
+    <div class="stats">
+      <div class="stat"><div class="v" id="dist">0,00</div><div class="l">km</div></div>
+      <div class="stat"><div class="v" id="time">0:00</div><div class="l">tempo</div></div>
+      <div class="stat"><div class="v" id="pace">–:––</div><div class="l">ritmo /km</div></div>
+    </div>
+    <div class="adj">
+      <button id="minus" aria-label="Diminuir 5 passos por minuto">−5</button>
+      <span class="lab">Ajuste do trecho atual</span>
+      <button id="plus" aria-label="Aumentar 5 passos por minuto">+5</button>
+    </div>
+    <div class="ctrl">
+      <button class="go" id="btnStart">Iniciar</button>
+      <button class="pause" id="btnPause" hidden>Pausar</button>
+      <button class="stop" id="btnStop" hidden>Encerrar</button>
+    </div>
+    <div class="ctrl"><button class="lockb" id="lockBtn" hidden>Bloquear tela para o bolso</button></div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card player">
+    <div class="mName">Nenhuma música tocando</div>
+    <div class="seekrow"><span class="mCur">0:00</span><input type="range" class="mSeek" min="0" max="1000" value="0" aria-label="Posição da música"><span class="mDur">0:00</span></div>
+    <div class="pbtns">
+      <button data-m="prev" aria-label="Música anterior">⏮&#xFE0E;</button>
+      <button class="pp" data-m="play" aria-label="Tocar música">▶&#xFE0E;</button>
+      <button data-m="next" aria-label="Próxima música">⏭&#xFE0E;</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Parciais</h2>
+    <ul class="splits" id="liveSplits"><li class="empty">Aparecem aqui a cada km completo.</li></ul>
+  </div>
+</section>
+
+<!-- ================= ATIVIDADE ================= -->
+<section class="view" id="vAct" hidden>
+  <h1>Atividade</h1>
+  <div class="seg4" id="actSeg">
+    <button data-p="week">Sem.</button><button data-p="month" class="on">Mês</button><button data-p="year">Ano</button><button data-p="all">Tudo</button>
+  </div>
+  <div class="pnav"><button id="pPrev" aria-label="Período anterior">‹</button><span id="pLabel"></span><button id="pNext" aria-label="Próximo período">›</button></div>
+  <div class="bigkm"><span id="aKm">0,0</span><small>km</small></div>
+  <div class="stats astats">
+    <div class="stat"><div class="v" id="aCount">0</div><div class="l">Corridas</div></div>
+    <div class="stat"><div class="v" id="aPace">–</div><div class="l">Pace médio</div></div>
+    <div class="stat"><div class="v" id="aDur">0:00</div><div class="l">Duração</div></div>
+  </div>
+  <div class="chart" id="aChart"></div>
+  <h3>Corridas</h3>
+  <div class="rlist" id="aList"></div>
+</section>
+
+<!-- ================= MÚSICAS ================= -->
+<section class="view" id="vMusic" hidden>
+  <h1>Músicas</h1>
+  <div class="card player" style="margin-top:0">
+    <div class="mName">Nenhuma música tocando</div>
+    <div class="seekrow"><span class="mCur">0:00</span><input type="range" class="mSeek" min="0" max="1000" value="0" aria-label="Posição da música"><span class="mDur">0:00</span></div>
+    <div class="pbtns">
+      <button data-m="prev" aria-label="Música anterior">⏮&#xFE0E;</button>
+      <button class="pp" data-m="play" aria-label="Tocar música">▶&#xFE0E;</button>
+      <button data-m="next" aria-label="Próxima música">⏭&#xFE0E;</button>
+    </div>
+    <div class="opt" style="margin-top:8px"><span>Volume da música</span><input type="range" id="mVol" min="0" max="1" step="0.05" value="0.7"></div>
+  </div>
+  <div class="card">
+    <ul class="songs" id="songs"><li class="empty">Nenhuma música ainda.</li></ul>
+    <label class="addf">Adicionar músicas<input type="file" id="musicIn" accept="audio/*,video/*,.mp3,.m4a,.mp4,.mov,.aac,.wav" multiple></label>
+    <div class="hint" id="musicMsg"></div>
+    <p class="hint">As músicas ficam guardadas neste iPhone e tocam mesmo com a chave de silencioso ligada.</p>
+  </div>
+</section>
+
+<!-- ================= AJUSTES ================= -->
+<section class="view" id="vSet" hidden>
+  <h1>Ajustes</h1>
+  <div class="card" style="margin-top:0">
+    <h2>Trechos de cadência</h2>
+    <div id="segs"></div>
+    <div class="row">
+      <button class="btn2" id="addSeg">Adicionar trecho</button>
+      <button class="btn2" id="resetSeg">Voltar ao padrão</button>
+    </div>
+    <p class="hint">Depois do último trecho, a cadência final continua até você encerrar.</p>
+  </div>
+
+  <div class="card">
+    <h2>Som</h2>
+    <div class="opt"><span>Som da batida</span>
+      <select id="sound"><option value="click">Clique</option><option value="wood">Madeira</option><option value="beep">Bipe</option></select></div>
+    <div class="opt"><span>Volume do metrônomo</span><input type="range" id="vol" min="0.1" max="1" step="0.05" value="0.8"></div>
+    <div class="opt"><span>Anunciar troca de trecho por voz</span><input type="checkbox" id="voice" checked></div>
+    <div class="opt"><span>Tocar junto com música de outro app<br><small>Com o iPhone no silencioso, o metrônomo fica mudo</small></span><input type="checkbox" id="mix" checked></div>
+    <div class="opt"><span>Modo teste (sem GPS)</span><input type="checkbox" id="test"></div>
+    <div class="row" id="testRow" hidden>
+      <button class="btn2" id="add100">+100 m</button>
+      <button class="btn2" id="add500">+500 m</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Backup das corridas</h2>
+    <p class="hint" id="bkCount" style="margin-top:0"></p>
+    <div class="row">
+      <button class="btn2" id="bkExport">Exportar backup</button>
+      <label class="addf">Importar backup<input type="file" id="bkIn" accept=".json,application/json"></label>
+    </div>
+    <p class="hint bkmsg" id="bkMsg"></p>
+    <p class="hint">O backup salva todas as corridas num arquivo. Guarde no app Arquivos ou no iCloud Drive. As músicas não entram no backup.</p>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Como usar no iPhone</summary>
+      <p>Abra pela Tela de Início. Ao iniciar a primeira corrida, permita o acesso à localização.</p>
+      <p>A tela precisa ficar ligada: se travar ou você trocar de app, o iOS pausa o GPS, o metrônomo e a música. Para o bolso, toque em “Bloquear tela para o bolso” e, se quiser, ative o Acesso Guiado (Ajustes › Acessibilidade › Acesso Guiado).</p>
+      <p>Depois de abrir uma vez com internet, o app funciona sem sinal. O mapa precisa de internet; sem sinal, aparece só o desenho do percurso.</p>
+    </details>
+  </div>
+</section>
+</main>
+
+<nav class="tabs" aria-label="Seções">
+  <div class="in">
+    <button data-tab="vRun" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v4M6 12l3-3 4 1 2 3 3 1M11 15l-1-5"/></svg>Correr</button>
+    <button data-tab="vAct"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>Atividade</button>
+    <button data-tab="vMusic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Músicas</button>
+    <button data-tab="vSet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Ajustes</button>
+  </div>
+</nav>
+
+<div class="sheet" id="sheet" hidden><div class="in">
+  <div class="shtop"><button id="shClose">‹ Voltar</button><span id="shTitle"></span></div>
+  <div id="shBody"></div>
+</div></div>
+
+<div class="lock" id="lock" hidden>
+  <div class="lc"><span id="lkCad">165</span><small>passos/min</small></div>
+  <div><div class="ld"><span id="lkDist">0,00</span> km · <span id="lkTime">0:00</span></div><div class="lm" id="lkSong"></div></div>
+  <div class="slide">Deslize para desbloquear<input type="range" id="unlock" min="0" max="100" value="0" aria-label="Deslize para desbloquear"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $=function(id){return document.getElementById(id)};
+  var $$=function(sel){return Array.prototype.slice.call(document.querySelectorAll(sel))};
+  function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+  function fmtKm(m,d){return (m/1000).toFixed(d==null?2:d).replace(".",",");}
+  function fmtTime(s){s=Math.max(0,Math.floor(s||0));var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
+    return (h?h+":"+String(m).padStart(2,"0"):m)+":"+String(x).padStart(2,"0");}
+  function fmtPace(sec){if(!isFinite(sec)||sec<=0)return "–";var m=Math.floor(sec/60),x=Math.round(sec-m*60);if(x===60){m++;x=0;}
+    return m+"'"+String(x).padStart(2,"0")+"''";}
+  var MESES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+  var DIAS=["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
+
+  // ================= Configuração =================
+  var DEFAULT=[{km:1,spm:165},{km:1,spm:170},{km:1,spm:175},{km:1,spm:180}];
+  var KEY="corrida-cfg-v1", DRAFT="corrida-rascunho-v1";
+  var cfg={segs:DEFAULT.map(function(s){return {km:s.km,spm:s.spm};}),sound:"click",vol:0.8,voice:true,mix:true,mVol:0.7};
+  try{
+    var sv=JSON.parse(localStorage.getItem(KEY)||"null")||JSON.parse(localStorage.getItem("cadencia-km-v1")||"null");
+    if(sv&&Array.isArray(sv.segs)&&sv.segs.length) cfg=Object.assign(cfg,sv);
+  }catch(e){}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(cfg));}catch(e){}}
+
+  // ================= Banco de dados =================
+  var dbp={};
+  function openDB(name,store){
+    return new Promise(function(res,rej){
+      var r=indexedDB.open(name,1);
+      r.onupgradeneeded=function(){ if(!r.result.objectStoreNames.contains(store)) r.result.createObjectStore(store,{keyPath:"id",autoIncrement:true}); };
+      r.onsuccess=function(){res(r.result);}; r.onerror=function(){rej(r.error);};
+    });
+  }
+  function req(name,store,mode,fn){
+    if(!dbp[name]) dbp[name]=openDB(name,store);
+    return dbp[name].then(function(d){return new Promise(function(res,rej){
+      var t=d.transaction(store,mode), q=fn(t.objectStore(store));
+      t.oncomplete=function(){res(q?q.result:undefined);};
+      t.onerror=t.onabort=function(){rej(t.error);};
+    });});
+  }
+  function songsReq(m,f){return req("cadencia-musicas","songs",m,f);}
+  function runsReq(m,f){return req("corrida-registros","runs",m,f);}
+
+  // ================= Estado da corrida =================
+  var st={running:false,paused:false,dist:0,elapsed:0,t0:0,last:null,segIdx:0,offsets:{},watchId:null,
+          splits:[],lastSplitAt:0,spmSum:0,spmDist:0,track:[],startTs:0};
+  function bounds(){var acc=0;return cfg.segs.map(function(s){var a=acc;acc+=s.km*1000;return [a,acc];});}
+  function segAt(d){var b=bounds();for(var i=0;i<b.length;i++){if(d<b[i][1])return i;}return b.length-1;}
+  function spmFor(i){return Math.max(100,Math.min(240,cfg.segs[i].spm+(st.offsets[i]||0)));}
+  function curSpm(){return spmFor(Math.min(st.segIdx,cfg.segs.length-1));}
+  function elapsedNow(){return st.elapsed+(st.running&&!st.paused?(performance.now()-st.t0)/1000:0);}
+
+  // ================= Áudio =================
+  var appMusic=false, ctx=null, nextT=0, sched=null, beatQueue=[];
+  function setSession(){
+    try{ if(navigator.audioSession) navigator.audioSession.type=(cfg.mix&&!appMusic)?"ambient":"playback"; }catch(e){}
+  }
+  function initAudio(){
+    setSession();
+    if(!ctx){var AC=window.AudioContext||window.webkitAudioContext; ctx=new AC();}
+    if(ctx.state!=="running") ctx.resume();
+    var b=ctx.createBuffer(1,1,22050),s=ctx.createBufferSource();s.buffer=b;s.connect(ctx.destination);s.start(0);
+  }
+  function tone(t,freq,dur,type,vol){
+    var o=ctx.createOscillator(),g=ctx.createGain();
+    o.type=type;o.frequency.setValueAtTime(freq,t);
+    g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.002);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+dur+0.02);
+  }
+  function click(t){
+    var v=cfg.vol;
+    if(cfg.sound==="wood"){tone(t,1800,0.035,"triangle",v);tone(t,900,0.05,"sine",v*0.6);}
+    else if(cfg.sound==="beep"){tone(t,880,0.06,"sine",v);}
+    else{tone(t,2500,0.02,"square",v*0.5);tone(t,1200,0.03,"sine",v*0.6);}
+    beatQueue.push(t);
+  }
+  function chime(){if(!ctx)return;var t=ctx.currentTime+0.05,v=cfg.vol;tone(t,988,0.18,"sine",v);tone(t+0.2,1319,0.28,"sine",v);}
+  function metroStart(){
+    nextT=ctx.currentTime+0.1; clearInterval(sched);
+    sched=setInterval(function(){ while(nextT<ctx.currentTime+0.12){click(nextT);nextT+=60/curSpm();} },25);
+  }
+  function metroStop(){clearInterval(sched);sched=null;}
+  function speak(text){
+    if(!cfg.voice||!("speechSynthesis" in window))return;
+    try{var u=new SpeechSynthesisUtterance(text);u.lang="pt-BR";u.rate=1.05;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}
+  }
+  (function loop(){
+    if(ctx){while(beatQueue.length&&beatQueue[0]<=ctx.currentTime){beatQueue.shift();flash();}}
+    if(st.running&&!$("vRun").hidden) renderLive();
+    requestAnimationFrame(loop);
+  })();
+  function flash(){var b=$("beat");b.classList.add("on");requestAnimationFrame(function(){requestAnimationFrame(function(){b.classList.remove("on");});});}
+
+  // ================= Tela ligada =================
+  var lock=null;
+  async function keepAwake(){try{if("wakeLock" in navigator)lock=await navigator.wakeLock.request("screen");}catch(e){}}
+  function releaseAwake(){if(lock){lock.release().catch(function(){});lock=null;}}
+  document.addEventListener("visibilitychange",function(){
+    if(document.visibilityState==="visible"){
+      if(st.running&&!st.paused) keepAwake();
+      if(ctx&&ctx.state!=="running"&&(st.running||appMusic)) ctx.resume();
+    }
+  });
+
+  // ================= GPS =================
+  function hav(a,b){var R=6371000,r=Math.PI/180,dLat=(b.lat-a.lat)*r,dLon=(b.lon-a.lon)*r;
+    var x=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return 2*R*Math.asin(Math.sqrt(x));}
+  function setGps(cls,txt){$("gpsDot").className="dot "+cls;$("gpsTxt").textContent=txt;}
+  function pushPt(pt){
+    var seg=st.track[st.track.length-1]; if(!seg){seg=[];st.track.push(seg);}
+    seg.push([+pt.lat.toFixed(6),+pt.lon.toFixed(6),Math.round(elapsedNow())]);
+  }
+  function onPos(p){
+    var c=p.coords,acc=c.accuracy;
+    setGps(acc<=15?"good":acc<=30?"weak":"bad","GPS ±"+Math.round(acc)+" m");
+    if(!st.running||st.paused||$("test").checked)return;
+    if(acc>35)return;
+    var pt={lat:c.latitude,lon:c.longitude,t:p.timestamp};
+    if(!st.last){st.last=pt;pushPt(pt);return;}
+    var d=hav(st.last,pt),dt=(pt.t-st.last.t)/1000;
+    if(d<Math.max(4,acc*0.4))return;
+    if(dt>0&&d/dt>9){st.last=pt;return;}
+    st.last=pt;pushPt(pt);addDist(d);
+  }
+  function onErr(e){
+    if(e.code===1){setGps("bad","Sem permissão");showMsg("Permita a localização: Ajustes › Privacidade e Segurança › Serviços de Localização.",true);}
+    else setGps("bad","Sem sinal");
+  }
+  function gpsStart(){
+    if(!("geolocation" in navigator)){showMsg("Este navegador não oferece GPS.",true);return;}
+    if(st.watchId!==null)return;
+    setGps("","Procurando…");
+    st.watchId=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+  }
+  function gpsStop(){if(st.watchId!==null){navigator.geolocation.clearWatch(st.watchId);st.watchId=null;}setGps("","GPS parado");}
+
+  // ================= Distância, parciais e trechos =================
+  function addDist(d){
+    st.spmSum+=curSpm()*d; st.spmDist+=d;
+    st.dist+=d;
+    while(st.dist>=(st.splits.length+1)*1000){
+      var now=elapsedNow();
+      st.splits.push({t:Math.round((now-st.lastSplitAt)*10)/10,spm:Math.round(st.spmSum/Math.max(1,st.spmDist))});
+      st.lastSplitAt=now; st.spmSum=0; st.spmDist=0;
+      renderLiveSplits();
+    }
+    var idx=segAt(st.dist);
+    if(idx!==st.segIdx){
+      st.segIdx=idx; chime(); speak("Trecho "+(idx+1)+". Cadência "+curSpm()+".");
+      renderTrack();
+    }
+  }
+  function runName(ts){
+    var d=new Date(ts),h=d.getHours();
+    var per=h<5?"de madrugada":h<12?"matutina":h<18?"vespertina":"noturna";
+    return DIAS[d.getDay()]+" corrida "+per;
+  }
+  function buildRun(){
+    var el=elapsedNow(), partM=st.dist-st.splits.length*1000;
+    return {start:st.startTs,dist:Math.round(st.dist),dur:Math.round(el),splits:st.splits.slice(),
+      partial:partM>=20?{m:Math.round(partM),t:Math.round(el-st.lastSplitAt),spm:Math.round(st.spmSum/Math.max(1,st.spmDist))||curSpm()}:null,
+      track:st.track.filter(function(s){return s.length;}),plan:cfg.segs.map(function(s){return s.spm;}),name:runName(st.startTs)};
+  }
+  function resetRun(){
+    st.dist=0;st.elapsed=0;st.last=null;st.segIdx=0;st.offsets={};st.splits=[];st.lastSplitAt=0;
+    st.spmSum=0;st.spmDist=0;st.track=[];st.startTs=0;
+    renderLiveSplits(); renderAll(); showMsg("");
+  }
+  setInterval(function(){
+    if(st.running){try{localStorage.setItem(DRAFT,JSON.stringify(buildRun()));}catch(e){}}
+  },10000);
+
+  // ================= Controles =================
+  function showMsg(t,err){var m=$("msg");m.textContent=t||"";m.className="msg"+(err?" err":"");}
+  function setTabLive(){ $$('[data-tab="vRun"]')[0].classList.toggle("live",st.running&&!st.paused); }
+  $("btnStart").onclick=function(){
+    initAudio();
+    if(!st.running){
+      resetRun();
+      st.running=true; st.startTs=Date.now(); st.track=[[]];
+      speak("Começando. Cadência "+curSpm()+".");
+    }else{ st.track.push([]); st.last=null; }
+    st.paused=false; st.t0=performance.now();
+    metroStart(); keepAwake(); if(!$("test").checked) gpsStart();
+    $("btnStart").hidden=true;$("btnPause").hidden=false;$("btnStop").hidden=false;$("lockBtn").hidden=false;
+    showMsg(""); renderAll(); setTabLive();
+  };
+  $("btnPause").onclick=function(){
+    st.elapsed=elapsedNow(); st.paused=true; metroStop(); gpsStop(); releaseAwake();
+    $("btnStart").textContent="Continuar";$("btnStart").hidden=false;$("btnPause").hidden=true;$("lockBtn").hidden=true;
+    showMsg("Pausado."); setTabLive();
+  };
+  $("btnStop").onclick=function(){
+    st.elapsed=elapsedNow(); st.running=false; st.paused=false; metroStop(); gpsStop(); releaseAwake();
+    $("btnStart").textContent="Iniciar";$("btnStart").hidden=false;$("btnPause").hidden=true;$("btnStop").hidden=true;$("lockBtn").hidden=true;
+    setTabLive();
+    var run=buildRun();
+    try{localStorage.setItem(DRAFT,JSON.stringify(run));}catch(e){}
+    openSheet(run,"new");
+  };
+  function adjust(n){st.offsets[st.segIdx]=(st.offsets[st.segIdx]||0)+n;renderAll();}
+  $("minus").onclick=function(){adjust(-5);}; $("plus").onclick=function(){adjust(5);};
+  $("add100").onclick=function(){if(st.running&&!st.paused)addDist(100);};
+  $("add500").onclick=function(){if(st.running&&!st.paused)addDist(500);};
+  $("test").onchange=function(){$("testRow").hidden=!this.checked;if(this.checked)gpsStop();else if(st.running&&!st.paused)gpsStart();};
+  $("sound").value=cfg.sound;$("vol").value=cfg.vol;$("voice").checked=cfg.voice;$("mix").checked=cfg.mix!==false;
+  $("sound").onchange=function(){cfg.sound=this.value;save();};
+  $("vol").oninput=function(){cfg.vol=parseFloat(this.value);save();};
+  $("voice").onchange=function(){cfg.voice=this.checked;save();};
+  $("mix").onchange=function(){cfg.mix=this.checked;save();setSession();};
+
+  // ================= Render da tela Correr =================
+  function renderTrack(){
+    var t=$("track");t.innerHTML="";
+    cfg.segs.forEach(function(s,i){
+      var d=document.createElement("div");d.className="s";d.style.flexGrow=s.km;
+      d.innerHTML='<div class="fill"></div><span>'+spmFor(i)+'</span>';t.appendChild(d);
+    });
+    updateTrack();
+  }
+  function updateTrack(){
+    var b=bounds(),kids=$("track").children;
+    for(var i=0;i<kids.length;i++){
+      var k=kids[i];k.classList.toggle("cur",i===st.segIdx);k.classList.toggle("done",i<st.segIdx);
+      var f=k.firstChild;
+      if(i===st.segIdx){var p=(st.dist-b[i][0])/(b[i][1]-b[i][0]);f.style.width=Math.min(100,Math.max(0,p*100))+"%";}
+      else f.style.width=i<st.segIdx?"100%":"0";
+      k.lastChild.textContent=spmFor(i);
+    }
+  }
+  function renderLive(){
+    $("dist").textContent=fmtKm(st.dist);
+    var el=elapsedNow();$("time").textContent=fmtTime(el);
+    $("pace").textContent=st.dist>50?fmtTime(el/(st.dist/1000)):"–:––";
+    updateTrack();
+    var b=bounds(),i=st.segIdx;
+    if(i<cfg.segs.length-1) $("nextTxt").innerHTML='Próximo: <b>'+spmFor(i+1)+'</b> em '+fmtKm(Math.max(0,b[i][1]-st.dist))+' km';
+    else $("nextTxt").textContent=st.dist>=b[i][1]?"Plano completo, mantendo a cadência final":"Último trecho, faltam "+fmtKm(b[i][1]-st.dist)+" km";
+  }
+  function renderAll(){
+    if(st.segIdx>cfg.segs.length-1) st.segIdx=cfg.segs.length-1;
+    $("cadNow").textContent=curSpm();
+    $("segLabel").textContent="Trecho "+(st.segIdx+1)+" de "+cfg.segs.length;
+    renderTrack();renderLive();
+  }
+  setInterval(function(){
+    $("cadNow").textContent=curSpm();
+    $("segLabel").textContent="Trecho "+(st.segIdx+1)+" de "+cfg.segs.length;
+  },250);
+  function renderLiveSplits(){
+    var ul=$("liveSplits");
+    if(!st.splits.length){ul.innerHTML='<li class="empty">Aparecem aqui a cada km completo.</li>';return;}
+    ul.innerHTML=st.splits.map(function(s,i){return '<li><span>Km '+(i+1)+' · '+s.spm+' passos/min</span><span>'+fmtTime(s.t)+'</span></li>';}).join("");
+  }
+
+  // ================= Bloqueio de tela =================
+  function setLock(on){$("lock").hidden=!on;$("unlock").value=0;if(on){keepAwake();updLock();}}
+  function updLock(){
+    if($("lock").hidden)return;
+    $("lkCad").textContent=curSpm();$("lkDist").textContent=fmtKm(st.dist);$("lkTime").textContent=fmtTime(elapsedNow());
+    $("lkSong").textContent=(cur>=0&&songs[cur]&&!mEl.paused)?"♪ "+songs[cur].name:"";
+  }
+  setInterval(updLock,500);
+  $("lockBtn").onclick=function(){setLock(true);};
+  function tryUnlock(){var u=$("unlock");if(+u.value>=92)setLock(false);else u.value=0;}
+  $("unlock").addEventListener("change",tryUnlock);
+  $("unlock").addEventListener("touchend",tryUnlock);
+  ["touchstart","touchmove","click","dblclick","gesturestart"].forEach(function(ev){
+    $("lock").addEventListener(ev,function(e){if(e.target!==$("unlock"))e.preventDefault();},{passive:false});
+  });
+
+  // ================= Editor de trechos =================
+  function renderSegs(){
+    var box=$("segs");box.innerHTML="";
+    cfg.segs.forEach(function(s,i){
+      var r=document.createElement("div");r.className="segrow";
+      r.innerHTML='<span class="i">'+(i+1)+'</span>'+
+        '<label>Distância (km)<input type="number" inputmode="decimal" min="0.1" step="0.1" value="'+s.km+'"></label>'+
+        '<label>Passos/min<input type="number" inputmode="numeric" min="100" max="240" step="1" value="'+s.spm+'"></label>'+
+        '<button class="del" aria-label="Remover trecho '+(i+1)+'">×</button>';
+      var ins=r.querySelectorAll("input");
+      ins[0].onchange=function(){var v=parseFloat(String(this.value).replace(",","."));if(v>0){s.km=Math.round(v*100)/100;save();renderAll();}else this.value=s.km;};
+      ins[1].onchange=function(){var v=parseInt(this.value,10);if(v>=100&&v<=240){s.spm=v;save();renderAll();}else this.value=s.spm;};
+      r.querySelector(".del").onclick=function(){if(cfg.segs.length>1){cfg.segs.splice(i,1);save();renderSegs();renderAll();}};
+      box.appendChild(r);
+    });
+  }
+  $("addSeg").onclick=function(){var l=cfg.segs[cfg.segs.length-1];cfg.segs.push({km:1,spm:Math.min(240,l.spm+5)});save();renderSegs();renderAll();};
+  $("resetSeg").onclick=function(){cfg.segs=DEFAULT.map(function(s){return {km:s.km,spm:s.spm};});save();renderSegs();renderAll();};
+
+  // ================= Percurso (mapa e desenho) =================
+  function allPts(run){var a=[];(run.track||[]).forEach(function(s){for(var i=0;i<s.length;i++)a.push(s[i]);});return a;}
+  function routeSvg(run,w,h,sw,mk){
+    var segs=(run.track||[]).filter(function(s){return s.length>1;});
+    if(!segs.length) return '<svg viewBox="0 0 '+w+' '+h+'"><circle cx="'+w/2+'" cy="'+h/2+'" r="'+sw*1.5+'" fill="currentColor" opacity=".5"/></svg>';
+    var pts=allPts({track:segs}), k=Math.cos(pts[0][0]*Math.PI/180);
+    var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    pts.forEach(function(p){var x=p[1]*k,y=-p[0];if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;});
+    var pad=sw*3, sc=Math.min((w-2*pad)/Math.max(maxX-minX,1e-9),(h-2*pad)/Math.max(maxY-minY,1e-9));
+    var ox=(w-(maxX-minX)*sc)/2, oy=(h-(maxY-minY)*sc)/2;
+    function X(p){return ((p[1]*k-minX)*sc+ox).toFixed(1);} function Y(p){return ((-p[0]-minY)*sc+oy).toFixed(1);}
+    var path=segs.map(function(s){return s.map(function(p,i){return (i?"L":"M")+X(p)+" "+Y(p);}).join("");}).join("");
+    var out='<svg viewBox="0 0 '+w+' '+h+'" aria-hidden="true"><path d="'+path+'" fill="none" stroke="currentColor" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round"/>';
+    if(mk){var a=pts[0],z=pts[pts.length-1];
+      out+='<circle cx="'+X(a)+'" cy="'+Y(a)+'" r="'+sw*1.6+'" fill="#1E9E5A" stroke="#fff" stroke-width="2"/>'+
+           '<circle cx="'+X(z)+'" cy="'+Y(z)+'" r="'+sw*1.6+'" fill="#D6324A" stroke="#fff" stroke-width="2"/>';}
+    return out+'</svg>';
+  }
+  var curMap=null;
+  function drawMap(el,run){
+    if(curMap){try{curMap.remove();}catch(e){}curMap=null;}
+    var segs=(run.track||[]).filter(function(s){return s.length>1;});
+    if(!segs.length){el.innerHTML='<div class="nomap">Sem percurso gravado</div>';return;}
+    if(window.L&&navigator.onLine){
+      try{
+        curMap=L.map(el,{zoomControl:false,attributionControl:true});
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(curMap);
+        var all=[];
+        segs.forEach(function(s){var ll=s.map(function(p){return [p[0],p[1]];});all=all.concat(ll);
+          L.polyline(ll,{color:"#1F4FD8",weight:5,opacity:.9}).addTo(curMap);});
+        L.circleMarker(all[0],{radius:7,color:"#fff",weight:2,fillColor:"#1E9E5A",fillOpacity:1}).addTo(curMap);
+        L.circleMarker(all[all.length-1],{radius:7,color:"#fff",weight:2,fillColor:"#D6324A",fillOpacity:1}).addTo(curMap);
+        curMap.fitBounds(all,{padding:[24,24]});
+        setTimeout(function(){if(curMap){curMap.invalidateSize();curMap.fitBounds(all,{padding:[24,24]});}},250);
+        return;
+      }catch(e){if(curMap){try{curMap.remove();}catch(_){}}curMap=null;el.innerHTML="";}
+    }
+    el.innerHTML=routeSvg(run,340,260,4,true);
+  }
+
+  // ================= Folha de resumo / detalhes =================
+  var sheetRun=null,sheetMode=null;
+  function dateLong(d){
+    return DIAS[d.getDay()]+", "+d.getDate()+" de "+d.toLocaleDateString("pt-BR",{month:"long"})+" de "+d.getFullYear()+
+      " às "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  }
+  function avgSpm(run){
+    var s=0,d=0;(run.splits||[]).forEach(function(x){s+=x.spm*1000;d+=1000;});
+    if(run.partial){s+=run.partial.spm*run.partial.m;d+=run.partial.m;}
+    return d?Math.round(s/d):null;
+  }
+  function stat(v,l){return '<div class="stat"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>';}
+  function openSheet(run,mode){
+    sheetRun=run;sheetMode=mode;
+    $("shTitle").textContent=mode==="new"?"Resumo da corrida":"";
+    $("shClose").hidden=mode==="new";
+    var pace=run.dist>0?run.dur/(run.dist/1000):0, cad=avgSpm(run);
+    var rows=(run.splits||[]).map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+fmtTime(s.t)+'</td><td>'+fmtPace(s.t)+'</td><td>'+s.spm+'</td></tr>';}).join("");
+    if(run.partial) rows+='<tr class="pt"><td>'+fmtKm(run.partial.m)+'</td><td>'+fmtTime(run.partial.t)+'</td><td>'+fmtPace(run.partial.t/(run.partial.m/1000))+'</td><td>'+run.partial.spm+'</td></tr>';
+    $("shBody").innerHTML=
+      '<p class="shdate">'+esc(dateLong(new Date(run.start)))+'</p>'+
+      '<button class="shname" id="shName">'+esc(run.name)+'</button>'+
+      '<div class="bigkm">'+fmtKm(run.dist)+'<small>km</small></div>'+
+      '<div class="stats astats">'+stat(fmtPace(pace),"Pace médio")+stat(fmtTime(run.dur),"Duração")+stat(cad||"–","Cadência média")+'</div>'+
+      '<div class="map" id="map"></div>'+
+      '<h3>Parciais</h3>'+
+      (rows?'<table class="spl"><thead><tr><th>Km</th><th>Tempo</th><th>Pace</th><th>Passos/min</th></tr></thead><tbody>'+rows+'</tbody></table>'
+           :'<p class="hint">Nenhum km completo.</p>')+
+      '<div class="shact">'+(mode==="new"
+        ?'<button class="go" id="shSave">Salvar corrida</button><button class="danger" id="shDiscard">Descartar</button>'
+        :'<button class="danger" id="shDelete">Apagar corrida</button>')+'</div>';
+    $("sheet").hidden=false; $("sheet").scrollTop=0; document.body.style.overflow="hidden";
+    drawMap($("map"),run);
+    $("shName").onclick=function(){
+      var n=prompt("Nome da corrida",run.name); if(!n||!n.trim())return;
+      run.name=n.trim(); this.textContent=run.name;
+      if(mode==="saved") runsReq("readwrite",function(s){return s.put(run);}).then(loadRuns);
+    };
+    if(mode==="new"){
+      $("shSave").onclick=function(){
+        var btn=this; btn.disabled=true;
+        var c=Object.assign({},run); delete c.id;
+        runsReq("readwrite",function(s){return s.add(c);}).then(function(){
+          try{localStorage.removeItem(DRAFT);}catch(e){}
+          closeSheet(); resetRun(); loadRuns().then(function(){showTab("vAct");});
+        }).catch(function(){btn.disabled=false;alert("Não foi possível salvar. Tente de novo.");});
+      };
+      $("shDiscard").onclick=function(){
+        if(!confirm("Descartar esta corrida? Ela não poderá ser recuperada."))return;
+        try{localStorage.removeItem(DRAFT);}catch(e){}
+        closeSheet(); resetRun();
+      };
+    }else{
+      $("shDelete").onclick=function(){
+        if(!confirm("Apagar esta corrida do histórico?"))return;
+        runsReq("readwrite",function(s){return s.delete(run.id);}).then(function(){closeSheet();loadRuns();});
+      };
+    }
+  }
+  function closeSheet(){
+    if(curMap){try{curMap.remove();}catch(e){}curMap=null;}
+    $("sheet").hidden=true; document.body.style.overflow=""; sheetRun=null;
+  }
+  $("shClose").onclick=closeSheet;
+
+  // ================= Atividade =================
+  var runs=[], act={p:"month",ref:new Date()};
+  function loadRuns(){
+    return runsReq("readonly",function(s){return s.getAll();}).then(function(a){
+      runs=(a||[]).sort(function(x,y){return y.start-x.start;}); renderAct();
+    }).catch(function(){runs=[];renderAct();});
+  }
+  function period(){
+    var r=act.ref,a,b,label,y=r.getFullYear(),m=r.getMonth();
+    if(act.p==="week"){
+      a=new Date(y,m,r.getDate());a.setDate(a.getDate()-((a.getDay()+6)%7));
+      b=new Date(a);b.setDate(b.getDate()+7);var e=new Date(b);e.setDate(e.getDate()-1);
+      label=a.getDate()+" "+MESES[a.getMonth()]+" – "+e.getDate()+" "+MESES[e.getMonth()];
+    }else if(act.p==="month"){
+      a=new Date(y,m,1);b=new Date(y,m+1,1);label=a.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+    }else if(act.p==="year"){
+      a=new Date(y,0,1);b=new Date(y+1,0,1);label=String(y);
+    }else{a=new Date(0);b=new Date(8.64e15);label="Todas as corridas";}
+    return {a:a,b:b,label:label};
+  }
+  function shift(n){
+    var r=act.ref;
+    if(act.p==="week")r.setDate(r.getDate()+7*n);
+    else if(act.p==="month"){r.setDate(1);r.setMonth(r.getMonth()+n);}
+    else if(act.p==="year")r.setFullYear(r.getFullYear()+n);
+    renderAct();
+  }
+  $("pPrev").onclick=function(){shift(-1);}; $("pNext").onclick=function(){shift(1);};
+  $$("#actSeg button").forEach(function(b){b.onclick=function(){
+    act.p=b.dataset.p; act.ref=new Date();
+    $$("#actSeg button").forEach(function(x){x.classList.toggle("on",x===b);}); renderAct();
+  };});
+  function buckets(p,list){
+    var bars=[],labels=[],idx;
+    if(act.p==="week"){bars=[0,0,0,0,0,0,0];labels=["S","T","Q","Q","S","S","D"];idx=function(d){return (d.getDay()+6)%7;};}
+    else if(act.p==="month"){var n=new Date(p.a.getFullYear(),p.a.getMonth()+1,0).getDate();
+      for(var i=0;i<n;i++){bars.push(0);labels.push([1,8,15,22,29].indexOf(i+1)>=0?String(i+1):"");}
+      idx=function(d){return d.getDate()-1;};}
+    else if(act.p==="year"){bars=new Array(12).fill(0);labels=["J","F","M","A","M","J","J","A","S","O","N","D"];idx=function(d){return d.getMonth();};}
+    else{var now=new Date().getFullYear(),min=now;
+      list.forEach(function(r){min=Math.min(min,new Date(r.start).getFullYear());});
+      for(var yy=min;yy<=now;yy++){bars.push(0);labels.push(String(yy));}
+      idx=function(d){return d.getFullYear()-min;};}
+    list.forEach(function(r){var i=idx(new Date(r.start));if(i>=0&&i<bars.length)bars[i]+=r.dist/1000;});
+    return {bars:bars,labels:labels};
+  }
+  function chartSvg(bk,avg){
+    var W=340,H=170,R=34,top=10,base=140,pw=W-R,n=bk.bars.length;
+    var mx=Math.max.apply(null,bk.bars.concat([avg||0,1]));
+    var max=Math.max(2,Math.ceil(mx/2)*2);
+    var bw=Math.min(22,pw/n*0.55),step=pw/n;
+    var o='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Quilômetros por período">';
+    [0,max/2,max].forEach(function(v){var y=base-(v/max)*(base-top);
+      o+='<line x1="0" x2="'+pw+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)" stroke-width="1"/>'+
+         '<text x="'+(W-2)+'" y="'+(y+4)+'" text-anchor="end" font-size="11" fill="var(--muted)">'+String(v).replace(".",",")+(v===0?" km":"")+'</text>';});
+    bk.bars.forEach(function(v,i){
+      var x=i*step+(step-bw)/2,h=v>0?Math.max(3,(v/max)*(base-top)):0;
+      if(h)o+='<rect x="'+x.toFixed(1)+'" y="'+(base-h).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="'+Math.min(4,bw/2)+'" fill="var(--amber)"/>';
+      if(bk.labels[i])o+='<text x="'+(i*step+step/2).toFixed(1)+'" y="'+(base+18)+'" text-anchor="middle" font-size="11" fill="var(--muted)">'+bk.labels[i]+'</text>';
+    });
+    if(avg>0){var ya=base-(avg/max)*(base-top);
+      o+='<line x1="0" x2="'+pw+'" y1="'+ya+'" y2="'+ya+'" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4 4"/>'+
+         '<text x="'+(pw-4)+'" y="'+(ya-5)+'" text-anchor="end" font-size="11" fill="var(--muted)">média '+avg.toFixed(1).replace(".",",")+'</text>';}
+    return o+'</svg>';
+  }
+  function dayLabel(d){
+    var t=new Date(),y=new Date();y.setDate(t.getDate()-1);
+    if(d.toDateString()===t.toDateString())return "Hoje";
+    if(d.toDateString()===y.toDateString())return "Ontem";
+    return DIAS[d.getDay()].slice(0,3)+"., "+String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear();
+  }
+  function renderAct(){
+    var p=period();
+    var list=runs.filter(function(r){return r.start>=p.a.getTime()&&r.start<p.b.getTime();});
+    $("pLabel").textContent=p.label;
+    $("pPrev").disabled=$("pNext").disabled=act.p==="all";
+    if(act.p!=="all") $("pNext").disabled=p.b.getTime()>Date.now();
+    var dist=0,dur=0;list.forEach(function(r){dist+=r.dist;dur+=r.dur;});
+    $("aKm").textContent=fmtKm(dist,1);$("aCount").textContent=list.length;
+    $("aPace").textContent=dist>0?fmtPace(dur/(dist/1000)):"–";$("aDur").textContent=fmtTime(dur);
+    $("aChart").innerHTML=chartSvg(buckets(p,list),list.length?dist/1000/list.length:0);
+    var box=$("aList");
+    if(!list.length){box.innerHTML='<div class="empty-act">Nenhuma corrida neste período. Toque em Correr e depois em Iniciar para gravar a próxima.</div>';}
+    else{
+      box.innerHTML="";
+      list.forEach(function(r){
+        var b=document.createElement("button");b.className="rc";
+        b.innerHTML='<div class="thumb">'+routeSvg(r,64,64,3,false)+'</div><div><div class="d">'+esc(dayLabel(new Date(r.start)))+'</div><div class="nm">'+esc(r.name)+'</div>'+
+          '<div class="row3"><span>'+fmtKm(r.dist)+'<small>km</small></span><span>'+fmtPace(r.dist>0?r.dur/(r.dist/1000):0)+'</span><span>'+fmtTime(r.dur)+'</span></div></div>';
+        b.onclick=function(){openSheet(r,"saved");};
+        box.appendChild(b);
+      });
+    }
+    $("bkCount").textContent=runs.length===1?"1 corrida salva.":runs.length+" corridas salvas.";
+  }
+
+  // ================= Abas =================
+  function showTab(id){
+    $$(".view").forEach(function(v){v.hidden=v.id!==id;});
+    $$(".tabs button").forEach(function(b){b.classList.toggle("on",b.dataset.tab===id);});
+    if(id==="vAct")renderAct();
+    if(id==="vRun")renderAll();
+    window.scrollTo(0,0);
+  }
+  $$(".tabs button").forEach(function(b){b.onclick=function(){showTab(b.dataset.tab);};});
+
+  // ================= Backup =================
+  function bkMsg(t,err){var m=$("bkMsg");m.textContent=t;m.className="hint bkmsg"+(err?" err":"");}
+  $("bkExport").onclick=async function(){
+    if(!runs.length){bkMsg("Ainda não há corridas para exportar.",true);return;}
+    var d=new Date(),name="corridas-"+d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+".json";
+    var data={app:"corrida",v:1,exportado:d.toISOString(),trechos:cfg.segs,corridas:runs.map(function(r){var c=Object.assign({},r);delete c.id;return c;})};
+    var file=new File([JSON.stringify(data)],name,{type:"application/json"});
+    try{
+      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});bkMsg("Backup criado: "+name);return;}
+    }catch(e){if(e&&e.name==="AbortError")return;}
+    var a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},3000);
+    bkMsg("Backup criado: "+name);
+  };
+  $("bkIn").onchange=function(){
+    var f=this.files&&this.files[0];this.value="";if(!f)return;
+    f.text().then(function(t){
+      var d=JSON.parse(t),lista=d&&(d.corridas||d.runs);
+      if(!Array.isArray(lista))throw new Error("formato");
+      var have={};runs.forEach(function(r){have[r.start]=1;});
+      var novos=lista.filter(function(r){return r&&r.start&&typeof r.dist==="number"&&!have[r.start];});
+      if(!novos.length){bkMsg("Nenhuma corrida nova nesse backup.");return;}
+      return runsReq("readwrite",function(s){novos.forEach(function(r){var c=Object.assign({},r);delete c.id;s.add(c);});return null;})
+        .then(function(){bkMsg(novos.length===1?"1 corrida importada.":novos.length+" corridas importadas.");return loadRuns();});
+    }).catch(function(){bkMsg("Esse arquivo não é um backup do app. Escolha o arquivo corridas-….json.",true);});
+  };
+
+  // ================= Músicas =================
+  var songs=[],tempSongs=[],cur=-1,mEl=document.createElement("video"),mGain=null,seeking=false;
+  mEl.preload="auto";mEl.playsInline=true;mEl.setAttribute("playsinline","");mEl.setAttribute("webkit-playsinline","");
+  mEl.style.cssText="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;bottom:0";
+  document.body.appendChild(mEl);
+  cfg.mVol=cfg.mVol==null?0.7:cfg.mVol;$("mVol").value=cfg.mVol;
+  function mmsg(t){$("musicMsg").textContent=t||"";}
+  function loadSongs(){
+    return songsReq("readonly",function(s){return s.getAll();}).then(function(all){
+      var keep=null;
+      songs.forEach(function(x){if(x.temp)return;if(x.url&&x.url===mEl.src)keep=x;else if(x.url)URL.revokeObjectURL(x.url);});
+      songs=(all||[]).map(function(x){return (keep&&keep.id===x.id)?keep:{id:x.id,name:x.name,url:URL.createObjectURL(x.blob)};}).concat(tempSongs);
+      if(cur>=songs.length)cur=-1;
+      renderSongs();updPlayer();
+    }).catch(function(){songs=tempSongs.slice();renderSongs();updPlayer();});
+  }
+  function renderSongs(){
+    var ul=$("songs");
+    if(!songs.length){ul.innerHTML='<li class="empty">Nenhuma música ainda. Toque em Adicionar músicas para escolher arquivos do iPhone.</li>';return;}
+    ul.innerHTML="";
+    songs.forEach(function(sg,i){
+      var li=document.createElement("li");if(i===cur)li.className="cur";
+      var b=document.createElement("button");b.className="nm";b.textContent=sg.name+(sg.temp?" (só nesta sessão)":"");b.onclick=function(){playSong(i);};
+      var x=document.createElement("button");x.className="x";x.textContent="×";x.setAttribute("aria-label","Apagar "+sg.name);
+      x.onclick=function(){
+        if(!confirm("Apagar “"+sg.name+"” do app?"))return;
+        if(i===cur){mEl.pause();mEl.removeAttribute("src");cur=-1;}else if(i<cur)cur--;
+        (sg.temp?Promise.resolve(tempSongs=tempSongs.filter(function(t){return t!==sg;}))
+                :songsReq("readwrite",function(s){return s.delete(sg.id);})).then(loadSongs);
+      };
+      li.appendChild(b);li.appendChild(x);ul.appendChild(li);
+    });
+  }
+  $("musicIn").onchange=async function(){
+    var files=[].slice.call(this.files||[]);this.value="";if(!files.length)return;
+    try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
+    mmsg("Guardando "+files.length+" arquivo(s)…");
+    var falhou=0;
+    for(var i=0;i<files.length;i++){
+      var f=files[i],ext=(f.name.split(".").pop()||"").toLowerCase();
+      var type=f.type||({mp3:"audio/mpeg",m4a:"audio/mp4",mp4:"video/mp4",mov:"video/quicktime",aac:"audio/aac",wav:"audio/wav"}[ext])||"audio/mpeg";
+      var nome=f.name.replace(/\.[^.]+$/,"");
+      try{var blob=f.slice(0,f.size,type);await songsReq("readwrite",function(s){return s.add({name:nome,blob:blob,added:Date.now()});});}
+      catch(e){falhou++;tempSongs.push({id:"t"+Date.now()+i,name:nome,url:URL.createObjectURL(f),temp:true});}
+    }
+    mmsg(falhou?falhou+" arquivo(s) grande(s) demais para guardar. Tocam agora, mas somem ao fechar o app.":"Pronto.");
+    loadSongs();
+  };
+  function musicGraph(){
+    initAudio();
+    if(!mGain){try{var src=ctx.createMediaElementSource(mEl);mGain=ctx.createGain();src.connect(mGain);mGain.connect(ctx.destination);}catch(e){}}
+    if(mGain)mGain.gain.value=cfg.mVol;
+  }
+  function playSong(i){
+    if(!songs.length){showTab("vMusic");return;}
+    i=(i+songs.length)%songs.length;
+    appMusic=true;musicGraph();
+    mEl.src=songs[i].url;cur=i;updPlayer();
+    var p=mEl.play();
+    if(p&&p.then)p.then(function(){updPlayer();renderSongs();}).catch(function(e){
+      mmsg(e&&e.name==="NotAllowedError"?"Toque em ▶ para começar.":"Não consegui tocar esse arquivo ("+(e&&e.name||"erro")+").");
+      updPlayer();renderSongs();
+    });
+    else{updPlayer();renderSongs();}
+  }
+  function togglePlay(){
+    if(cur<0||!songs[cur]){playSong(0);return;}
+    if(mEl.paused){appMusic=true;musicGraph();mEl.play().catch(function(){});}
+    else{mEl.pause();appMusic=false;setSession();}
+  }
+  $$('[data-m="play"]').forEach(function(b){b.onclick=togglePlay;});
+  $$('[data-m="next"]').forEach(function(b){b.onclick=function(){playSong(cur+1);};});
+  $$('[data-m="prev"]').forEach(function(b){b.onclick=function(){
+    if(cur>=0&&mEl.currentTime>3){mEl.currentTime=0;return;}
+    playSong(cur<0?0:cur-1);
+  };});
+  function updSeek(){
+    var d=mEl.duration,t=mEl.currentTime,ok=isFinite(d)&&d>0&&cur>=0;
+    $$(".mSeek").forEach(function(r){if(!seeking)r.value=ok?Math.round(t/d*1000):0;r.disabled=!ok;});
+    if(!seeking)$$(".mCur").forEach(function(e){e.textContent=fmtTime(ok?t:0);});
+    $$(".mDur").forEach(function(e){e.textContent=ok?fmtTime(d):"0:00";});
+  }
+  function updPlayer(){
+    var name=cur>=0&&songs[cur]?songs[cur].name:"Nenhuma música tocando",playing=!mEl.paused&&cur>=0;
+    $$(".mName").forEach(function(e){e.textContent=name;});
+    $$('[data-m="play"]').forEach(function(b){b.innerHTML=playing?"❚❚":"▶&#xFE0E;";b.setAttribute("aria-label",playing?"Pausar música":"Tocar música");});
+    updSeek();
+  }
+  $$(".mSeek").forEach(function(r){
+    r.addEventListener("input",function(){
+      seeking=true;var d=mEl.duration,v=this.value;
+      if(isFinite(d))$$(".mCur").forEach(function(e){e.textContent=fmtTime(v/1000*d);});
+    });
+    r.addEventListener("change",function(){
+      var d=mEl.duration;if(isFinite(d))mEl.currentTime=this.value/1000*d;seeking=false;updSeek();
+    });
+  });
+  ["timeupdate","loadedmetadata","durationchange"].forEach(function(ev){mEl.addEventListener(ev,updSeek);});
+  ["play","pause"].forEach(function(ev){mEl.addEventListener(ev,updPlayer);});
+  mEl.addEventListener("ended",function(){playSong(cur+1);});
+  $("mVol").oninput=function(){cfg.mVol=parseFloat(this.value);save();if(mGain)mGain.gain.value=cfg.mVol;};
+
+  // ================= Início =================
+  if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}
+  renderSegs();renderAll();renderLiveSplits();
+  if("indexedDB" in window){loadSongs();loadRuns().then(function(){
+    try{var dr=JSON.parse(localStorage.getItem(DRAFT)||"null");
+      if(dr&&dr.start&&!runs.some(function(r){return r.start===dr.start;})){openSheet(dr,"new");$("shTitle").textContent="Corrida não salva";}
+      else localStorage.removeItem(DRAFT);
+    }catch(e){}
+  });}
+})();
+</script>
+</body>
+</html>
