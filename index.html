@@ -78,6 +78,9 @@ button{cursor:pointer}
 .go{background:var(--blue);color:#fff}
 .pause{background:var(--amber);color:#14202B}
 .stop{background:transparent;border:2px solid var(--line)!important;color:var(--ink)}
+.ctrl #btnStart{background:#39FF14;color:#0E1621}
+.ctrl #btnPause{background:#FFE45C;color:#0E1621}
+.ctrl #btnStop{background:#FF1A3C;color:#fff;border:0!important}
 .ctrl .lockb{background:var(--ink);color:var(--bg);font-size:1.15rem}
 .ctrl button[hidden]{display:none}
 .msg{margin-top:10px;font-size:.92rem;color:var(--muted);min-height:1.2em}
@@ -308,6 +311,28 @@ details p{color:var(--muted);font-size:.92rem}
   </div>
 
   <div class="card">
+    <h2>Batimentos do Apple Watch</h2>
+    <p class="hint" style="margin-top:0">Inicie um treino no Watch durante a corrida. Depois, na corrida salva, toque em Buscar batimentos e, de volta ao app, em Colar batimentos.</p>
+    <details style="margin-top:10px">
+      <summary>Como montar o atalho (uma vez só)</summary>
+      <p>No app Atalhos, crie um atalho chamado exatamente <b>Batimentos Corrida</b> com estas ações, nesta ordem:</p>
+      <p>1. <b>Dividir Texto</b>: dividir Entrada do Atalho por Personalizado <b>,</b> (vírgula).</p>
+      <p>2. <b>Obter Item da Lista</b>: Primeiro Item de Texto Dividido.</p>
+      <p>3. <b>Ajustar Data</b>: Subtrair, valor = Item da Lista, unidade segundos, de Data Atual. Renomeie o resultado para <b>Início</b>.</p>
+      <p>4. <b>Obter Item da Lista</b>: Último Item de Texto Dividido.</p>
+      <p>5. <b>Ajustar Data</b>: Subtrair, valor = Item da Lista, unidade segundos, de Data Atual. Renomeie para <b>Fim</b>.</p>
+      <p>6. <b>Encontrar Amostras de Saúde</b>: Tipo é Frequência Cardíaca; Data de Início está entre Início e Fim; ordenar por Data de Início, mais antigo primeiro; sem limite.</p>
+      <p>7. <b>Repetir com Cada</b> item de Amostras de Saúde. Dentro da repetição:<br>
+         a. <b>Obter Tempo Entre Datas</b>: entre Início e Item Repetido › Data de Início, em Segundos.<br>
+         b. <b>Texto</b>: Tempo Entre Datas ; Item Repetido › Valor (com um ponto e vírgula no meio, sem espaços).</p>
+      <p>8. Depois de Fim da Repetição: <b>Combinar Texto</b>: Resultados da Repetição com Personalizado <b>|</b>.</p>
+      <p>9. <b>Copiar para Área de Transferência</b>: Texto Combinado.</p>
+      <p>10. <b>Mostrar Notificação</b>: “Batimentos copiados. Volte ao app Corrida.”</p>
+      <p>Na primeira vez, permita que o atalho leia os dados de Saúde.</p>
+    </details>
+  </div>
+
+  <div class="card">
     <h2>Backup das corridas</h2>
     <p class="hint" id="bkCount" style="margin-top:0"></p>
     <div class="row">
@@ -494,7 +519,7 @@ details p{color:var(--muted);font-size:.92rem}
     st.dist+=d;
     while(st.dist>=(st.splits.length+1)*1000){
       var now=elapsedNow();
-      st.splits.push({t:Math.round((now-st.lastSplitAt)*10)/10,spm:Math.round(st.spmSum/Math.max(1,st.spmDist))});
+      st.splits.push({t:Math.round((now-st.lastSplitAt)*10)/10,spm:Math.round(st.spmSum/Math.max(1,st.spmDist)),w:Math.round((Date.now()-st.startTs)/1000)});
       st.lastSplitAt=now; st.spmSum=0; st.spmDist=0;
       renderLiveSplits();
     }
@@ -511,7 +536,7 @@ details p{color:var(--muted);font-size:.92rem}
   }
   function buildRun(){
     var el=elapsedNow(), partM=st.dist-st.splits.length*1000;
-    return {start:st.startTs,dist:Math.round(st.dist),dur:Math.round(el),splits:st.splits.slice(),
+    return {start:st.startTs,end:Date.now(),dist:Math.round(st.dist),dur:Math.round(el),splits:st.splits.slice(),
       partial:partM>=20?{m:Math.round(partM),t:Math.round(el-st.lastSplitAt),spm:Math.round(st.spmSum/Math.max(1,st.spmDist))||curSpm()}:null,
       track:st.track.filter(function(s){return s.length;}),plan:cfg.segs.map(function(s){return s.spm;}),name:runName(st.startTs)};
   }
@@ -699,8 +724,10 @@ details p{color:var(--muted);font-size:.92rem}
     $("shTitle").textContent=mode==="new"?"Resumo da corrida":"";
     $("shClose").hidden=mode==="new";
     var pace=run.dist>0?run.dur/(run.dist/1000):0, cad=avgSpm(run);
-    var rows=(run.splits||[]).map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+fmtTime(s.t)+'</td><td>'+fmtPace(s.t)+'</td><td>'+s.spm+'</td></tr>';}).join("");
-    if(run.partial) rows+='<tr class="pt"><td>'+fmtKm(run.partial.m)+'</td><td>'+fmtTime(run.partial.t)+'</td><td>'+fmtPace(run.partial.t/(run.partial.m/1000))+'</td><td>'+run.partial.spm+'</td></tr>';
+    var hasHR=run.hr&&run.hr.length, kb=hasHR?kmBpm(run):[];
+    function bc(i){return hasHR?'<td>'+(kb[i]||"–")+'</td>':"";}
+    var rows=(run.splits||[]).map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+fmtTime(s.t)+'</td><td>'+fmtPace(s.t)+'</td><td>'+s.spm+'</td>'+bc(i)+'</tr>';}).join("");
+    if(run.partial) rows+='<tr class="pt"><td>'+fmtKm(run.partial.m)+'</td><td>'+fmtTime(run.partial.t)+'</td><td>'+fmtPace(run.partial.t/(run.partial.m/1000))+'</td><td>'+run.partial.spm+'</td>'+bc((run.splits||[]).length)+'</tr>';
     $("shBody").innerHTML=
       '<p class="shdate">'+esc(dateLong(new Date(run.start)))+'</p>'+
       '<button class="shname" id="shName">'+esc(run.name)+'</button>'+
@@ -708,13 +735,15 @@ details p{color:var(--muted);font-size:.92rem}
       '<div class="stats astats">'+stat(fmtPace(pace),"Pace médio")+stat(fmtTime(run.dur),"Duração")+stat(cad||"–","Cadência média")+'</div>'+
       '<div class="map" id="map"></div>'+
       '<h3>Parciais</h3>'+
-      (rows?'<table class="spl"><thead><tr><th>Km</th><th>Tempo</th><th>Pace</th><th>Passos/min</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      (rows?'<table class="spl"><thead><tr><th>Km</th><th>Tempo</th><th>Pace</th><th>Passos/min</th>'+(hasHR?'<th>BPM</th>':'')+'</tr></thead><tbody>'+rows+'</tbody></table>'
            :'<p class="hint">Nenhum km completo.</p>')+
+      '<h3>Batimentos</h3><div id="hrBox"></div>'+
       '<div class="shact">'+(mode==="new"
         ?'<button class="go" id="shSave">Salvar corrida</button><button class="danger" id="shDiscard">Descartar</button>'
         :'<button class="danger" id="shDelete">Apagar corrida</button>')+'</div>';
     $("sheet").hidden=false; $("sheet").scrollTop=0; document.body.style.overflow="hidden";
     drawMap($("map"),run);
+    renderHR(run,mode);
     $("shName").onclick=function(){
       var n=prompt("Nome da corrida",run.name); if(!n||!n.trim())return;
       run.name=n.trim(); this.textContent=run.name;
@@ -724,9 +753,11 @@ details p{color:var(--muted);font-size:.92rem}
       $("shSave").onclick=function(){
         var btn=this; btn.disabled=true;
         var c=Object.assign({},run); delete c.id;
-        runsReq("readwrite",function(s){return s.add(c);}).then(function(){
+        runsReq("readwrite",function(s){return s.add(c);}).then(function(id){
           try{localStorage.removeItem(DRAFT);}catch(e){}
-          closeSheet(); resetRun(); loadRuns().then(function(){showTab("vAct");});
+          closeSheet(); resetRun(); loadRuns().then(function(){
+            showTab("vAct"); var r=runs.filter(function(x){return x.id===id;})[0]; if(r) openSheet(r,"saved");
+          });
         }).catch(function(){btn.disabled=false;alert("Não foi possível salvar. Tente de novo.");});
       };
       $("shDiscard").onclick=function(){
@@ -746,6 +777,69 @@ details p{color:var(--muted);font-size:.92rem}
     $("sheet").hidden=true; document.body.style.overflow=""; sheetRun=null;
   }
   $("shClose").onclick=closeSheet;
+
+
+  // ================= Batimentos (Apple Watch via Atalhos) =================
+  var SHORTCUT="Batimentos Corrida", PEND="corrida-bpm-pendente";
+  function runEndSec(run){return run.end?(run.end-run.start)/1000:run.dur;}
+  function parseHR(txt){
+    var out=[];
+    String(txt||"").split(/[|\n]+/).forEach(function(e){
+      var m=e.split(";");if(m.length<2)return;
+      var t=parseFloat(String(m[0]).replace(",",".").replace(/[^\d.\-]/g,""));
+      var b=parseFloat(String(m[1]).replace(",",".").replace(/[^\d.]/g,""));
+      if(isFinite(t)&&isFinite(b)&&b>25&&b<250)out.push([Math.round(t),Math.round(b)]);
+    });
+    if(out.length&&out.filter(function(x){return x[0]<0;}).length>out.length/2)out.forEach(function(x){x[0]=-x[0];});
+    return out.sort(function(a,b){return a[0]-b[0];});
+  }
+  function hrStats(hr){var s=0,mx=0,mn=999;hr.forEach(function(x){s+=x[1];if(x[1]>mx)mx=x[1];if(x[1]<mn)mn=x[1];});return {avg:Math.round(s/hr.length),max:mx,min:mn};}
+  function kmBpm(run){
+    var res=[],prev=0,acc=0;
+    function avgIn(a,b){var s=0,n=0;run.hr.forEach(function(x){if(x[0]>=a&&x[0]<b){s+=x[1];n++;}});return n?Math.round(s/n):null;}
+    (run.splits||[]).forEach(function(sp){acc+=sp.t;var w=sp.w!=null?sp.w:acc;res.push(avgIn(prev,w));prev=w;});
+    if(run.partial)res.push(avgIn(prev,runEndSec(run)+1));
+    return res;
+  }
+  function hrChart(hr,end){
+    var W=340,H=150,top=12,base=128,R=34,pw=W-R;
+    var st2=hrStats(hr),lo=Math.max(30,Math.floor((st2.min-5)/10)*10),hi=Math.ceil((st2.max+5)/10)*10,T=Math.max(end,hr[hr.length-1][0],1);
+    function X(t){return (t/T*pw).toFixed(1);} function Y(b){return (base-(b-lo)/(hi-lo)*(base-top)).toFixed(1);}
+    var o='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Batimentos durante a corrida">';
+    [lo,Math.round((lo+hi)/2),hi].forEach(function(v){o+='<line x1="0" x2="'+pw+'" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="var(--line)"/><text x="'+(W-2)+'" y="'+(+Y(v)+4)+'" text-anchor="end" font-size="11" fill="var(--muted)">'+v+'</text>';});
+    o+='<polyline fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linejoin="round" points="'+hr.map(function(x){return X(x[0])+","+Y(x[1]);}).join(" ")+'"/>';
+    o+='<line x1="0" x2="'+pw+'" y1="'+Y(st2.avg)+'" y2="'+Y(st2.avg)+'" stroke="var(--muted)" stroke-dasharray="4 4"/>';
+    o+='<text x="0" y="'+(base+18)+'" font-size="11" fill="var(--muted)">0:00</text><text x="'+pw+'" y="'+(base+18)+'" text-anchor="end" font-size="11" fill="var(--muted)">'+fmtTime(T)+'</text>';
+    return o+'</svg>';
+  }
+  function renderHR(run,mode){
+    var box=$("hrBox");if(!box)return;
+    if(mode==="new"){box.innerHTML='<p class="hint" style="margin-top:0">Salve a corrida para buscar os batimentos do Apple Watch.</p>';return;}
+    var h="";
+    if(run.hr&&run.hr.length){
+      var s2=hrStats(run.hr);
+      h+='<div class="stats astats">'+stat(s2.avg,"BPM médio")+stat(s2.max,"BPM máximo")+stat(s2.min,"BPM mínimo")+'</div><div class="chart">'+hrChart(run.hr,runEndSec(run))+'</div>';
+    }else h+='<p class="hint" style="margin-top:0">Com um treino iniciado no Apple Watch, toque em Buscar batimentos. Quando o Atalhos terminar, volte aqui e toque em Colar batimentos.</p>';
+    h+='<div class="row"><button class="btn2" id="hrGet">'+(run.hr&&run.hr.length?"Buscar de novo":"Buscar batimentos")+'</button><button class="btn2" id="hrPaste">Colar batimentos</button></div><p class="hint" id="hrMsg"></p>';
+    box.innerHTML=h;
+    $("hrGet").onclick=function(){
+      var now=Date.now(),a=Math.max(0,Math.round((now-run.start)/1000)),b=Math.max(0,Math.round((now-(run.end||run.start+run.dur*1000))/1000));
+      try{localStorage.setItem(PEND,String(run.id));}catch(e){}
+      location.href="shortcuts://run-shortcut?name="+encodeURIComponent(SHORTCUT)+"&input=text&text="+encodeURIComponent(a+","+b);
+    };
+    $("hrPaste").onclick=async function(){
+      var txt="";
+      try{txt=await navigator.clipboard.readText();}catch(e){}
+      if(!txt)txt=prompt("Cole aqui os batimentos copiados pelo atalho")||"";
+      var hr=parseHR(txt);
+      if(!hr.length){$("hrMsg").textContent="Não encontrei batimentos no que foi copiado. Rode o atalho de novo e confira se o treino estava ativo no Watch.";return;}
+      run.hr=hr;
+      runsReq("readwrite",function(s){return s.put(run);}).then(function(){
+        try{localStorage.removeItem(PEND);}catch(e){}
+        loadRuns().then(function(){openSheet(run,"saved");});
+      });
+    };
+  }
 
   // ================= Atividade =================
   var runs=[], act={p:"month",ref:new Date()};
@@ -988,7 +1082,11 @@ details p{color:var(--muted);font-size:.92rem}
   if("indexedDB" in window){loadSongs();loadRuns().then(function(){
     try{var dr=JSON.parse(localStorage.getItem(DRAFT)||"null");
       if(dr&&dr.start&&!runs.some(function(r){return r.start===dr.start;})){openSheet(dr,"new");$("shTitle").textContent="Corrida não salva";}
-      else localStorage.removeItem(DRAFT);
+      else{
+        localStorage.removeItem(DRAFT);
+        var pid=+localStorage.getItem(PEND);
+        if(pid){var pr=runs.filter(function(r){return r.id===pid;})[0];if(pr)openSheet(pr,"saved");}
+      }
     }catch(e){}
   });}
 })();
